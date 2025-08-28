@@ -1,7 +1,4 @@
-# This workflow builds the Python project into cross-platform executables using PyInstaller.
-# The version is set based on the branch name.
-
-name: Build Cross-Platform Executable
+name: Build Cross-Platform Python App
 
 on:
   push:
@@ -16,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -32,20 +29,57 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Get version from branch
-        id: get_version
+      - name: Get version from branch (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        id: get_version_linux
+        shell: bash
         run: |
           BRANCH_NAME="${GITHUB_REF##*/}"
-          # Remove slashes and illegal chars, fallback to 'dev' if not found
-          VERSION=$(echo "$BRANCH_NAME" | sed 's#[^a-zA-Z0-9._-]#-#g')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "version=${BRANCH_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Build with PyInstaller
+      - name: Get version from branch (Windows)
+        if: matrix.os == 'windows-latest'
+        id: get_version_win
+        shell: pwsh
         run: |
-          pyinstaller --onefile main.py --name "KingGodCastleAIO-${{ steps.get_version.outputs.version }}"
+          $branchName = "$env:GITHUB_REF".Split("/")[-1]
+          echo "branch_name=$branchName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $version = $branchName -replace '^v', ''
+          echo "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Upload artifact
+      - name: Build with PyInstaller (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pyinstaller --onefile main.py --name "KingGodCastleAIO-${{ steps.get_version_linux.outputs.version }}"
+
+      - name: Build with PyInstaller (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pyinstaller --onefile main.py --name "KingGodCastleAIO-${{ steps.get_version_win.outputs.version }}"
+
+      - name: Upload artifact (Linux)
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: KingGodCastleAIO-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
+          name: KingGodCastleAIO-ubuntu-${{ steps.get_version_linux.outputs.version }}
           path: dist/*
+
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: KingGodCastleAIO-windows-${{ steps.get_version_win.outputs.version }}
+          path: dist/*
+
+      - name: Merge to main branch
+        if: github.ref != 'refs/heads/main' && success()
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git fetch origin main
+          git checkout main
+          git merge --no-ff ${{ github.ref_name }} -m "Auto-merge from build workflow"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

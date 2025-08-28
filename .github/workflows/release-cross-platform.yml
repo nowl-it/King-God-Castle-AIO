@@ -7,42 +7,179 @@ on:
       - completed
     branches:
       - main
+  # Cho phép trigger thủ công
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >
+      github.event_name == 'workflow_dispatch' || 
+      (github.event.workflow_run.conclusion == 'success' && 
+       github.event.workflow_run.head_branch == 'main')
+
     steps:
-      - name: Download Linux artifact
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts from workflow run
+        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
-          name: linux
-          path: ./artifacts/linux
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          path: ./artifacts
 
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: windows
-          path: ./artifacts/windows
-
-      - name: Get version from artifact file
+      - name: Get version
         id: get_version
         run: |
-          VERSION=$(ls ./artifacts/linux 2>/dev/null | grep -oP '(?<=KingGodCastleAIO-)\d+\.\d+\.\d+\w*' | head -n1)
-          if [ -z "$VERSION" ]; then
-            VERSION=$(ls ./artifacts/windows 2>/dev/null | grep -oP '(?<=KingGodCastleAIO-)\d+\.\d+\.\d+\w*' | head -n1)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract version from artifact names or files
+            VERSION=""
+            for dir in ./artifacts/*/; do
+              if [ -d "$dir" ]; then
+                ARTIFACT_VERSION=$(basename "$dir" | grep -oP '(?<=-)v?\K\d+\.\d+\.\d+[\w\-]*' || true)
+                if [ -n "$ARTIFACT_VERSION" ]; then
+                  VERSION="$ARTIFACT_VERSION"
+                  break
+                fi
+              fi
+            done
+            
+            # Fallback: extract from file names
+            if [ -z "$VERSION" ]; then
+              VERSION=$(find ./artifacts -name "*KingGodCastleAIO*" | head -1 | grep -oP '(?<=KingGodCastleAIO-)\d+\.\d+\.\d+[\w\-]*' || true)
+            fi
+            
+            # Final fallback
+            if [ -z "$VERSION" ]; then
+              VERSION="dev-$(date +'%Y%m%d%H%M%S')"
+              echo "⚠️ Could not determine version, using: $VERSION"
+            fi
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Release version: $VERSION"
+
+      - name: Organize artifacts
+        run: |
+          mkdir -p release_assets
+
+          # Copy and rename artifacts
+          if [ -d "./artifacts" ]; then
+            find ./artifacts -type f -name "*KingGodCastleAIO*" | while read -r file; do
+              filename=$(basename "$file")
+              platform=""
+              
+              # Determine platform from path or filename
+              if [[ "$file" == *"/linux"* ]] || [[ "$filename" != *.exe ]]; then
+                platform="linux"
+              elif [[ "$file" == *"/windows"* ]] || [[ "$filename" == *.exe ]]; then
+                platform="windows"
+              fi
+              
+              if [ -n "$platform" ]; then
+                new_name="KingGodCastleAIO-${{ steps.get_version.outputs.version }}-${platform}"
+                if [[ "$filename" == *.exe ]]; then
+                  new_name="${new_name}.exe"
+                fi
+                cp "$file" "release_assets/$new_name"
+                echo "✅ Copied: $filename -> $new_name"
+              fi
+            done
+          fi
+
+          # List all release assets
+          echo "📋 Release assets:"
+          ls -la release_assets/ || echo "No assets found"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          CHANGELOG=""
+
+          # Get commits since last tag
+          if git describe --tags --abbrev=0 2>/dev/null; then
+            LAST_TAG=$(git describe --tags --abbrev=0)
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          else
+            # Get last 10 commits if no tags exist
+            CHANGELOG=$(git log -10 --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Initial release"
+          fi
+
+          # Save changelog to file for multiline output
+          cat << EOF > changelog.md
+          ## What's Changed
+
+          $CHANGELOG
+
+          ## Download
+
+          Choose the appropriate version for your operating system:
+          - **Linux**: \`KingGodCastleAIO-${{ steps.get_version.outputs.version }}-linux\`
+          - **Windows**: \`KingGodCastleAIO-${{ steps.get_version.outputs.version }}-windows.exe\`
+
+          ---
+          *This release was automatically generated from the latest build.*
+          EOF
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          TAG="v${{ steps.get_version.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "🏷️ Release $TAG already exists"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🆕 Release $TAG will be created"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
-          name: Release v${{ steps.get_version.outputs.version }}
-          body: |
-            Auto release from workflow_run for cross-platform build.
-          files: |
-            ./artifacts/linux/*
-            ./artifacts/windows/*
+          name: "🚀 Release v${{ steps.get_version.outputs.version }}"
+          body_path: changelog.md
+          files: release_assets/*
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'dev') || contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'rc') }}
+          make_latest: ${{ !contains(steps.get_version.outputs.version, 'dev') && !contains(steps.get_version.outputs.version, 'alpha') && !contains(steps.get_version.outputs.version, 'beta') && !contains(steps.get_version.outputs.version, 'rc') }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: v${{ steps.get_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Assets**: $(ls -1 release_assets/ | wc -l) files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Assets Released:" >> $GITHUB_STEP_SUMMARY
+          for file in release_assets/*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              size=$(du -h "$file" | cut -f1)
+              echo "- \`$filename\` ($size)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

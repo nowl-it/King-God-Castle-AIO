@@ -92,7 +92,8 @@ jobs:
           fi
         shell: bash
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Cross-platform)
+        shell: bash
         run: |
           pyinstaller --onefile \
             --name "${{ env.APP_NAME }}-${{ steps.get_version.outputs.version }}${{ matrix.executable_suffix }}" \

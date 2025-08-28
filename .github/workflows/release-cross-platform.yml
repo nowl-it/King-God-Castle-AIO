@@ -1,0 +1,36 @@
+name: Release Cross-Platform Python App
+
+on:
+  workflow_run:
+    workflows: ["Build Cross-Platform Python App"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Get version from workflow_run
+        id: get_version
+        run: |
+          VERSION=$(ls ./artifacts | grep -oP '(?<=KingGodCastleAIO-(ubuntu|windows)-)\d+\.\d+\.\d+\w*' | head -n1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
+          body: |
+            Auto release from workflow_run for cross-platform build.
+          files: ./artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

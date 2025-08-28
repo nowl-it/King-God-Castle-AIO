@@ -1,8 +1,7 @@
 name: Build Cross-Platform Python App
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 

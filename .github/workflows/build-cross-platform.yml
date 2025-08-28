@@ -1,12 +1,10 @@
 name: Build Cross-Platform Python App
 
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
+    types: [closed]
     branches:
-      - "**"
+      - main
 
 jobs:
   build:
@@ -72,14 +70,26 @@ jobs:
           name: KingGodCastleAIO-windows-${{ steps.get_version_win.outputs.version }}
           path: dist/*
 
-      - name: Merge to main branch
-        if: github.ref != 'refs/heads/main' && success()
-        run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
-          git fetch origin main
-          git checkout main
-          git merge --no-ff ${{ github.ref_name }} -m "Auto-merge from build workflow"
-          git push origin main
+      - name: Create GitHub Release (Linux)
+        if: matrix.os == 'ubuntu-latest' && github.event.pull_request.merged == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version_linux.outputs.version }}
+          name: Release v${{ steps.get_version_linux.outputs.version }}
+          body: |
+            Auto release from workflow for Linux build.
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release (Windows)
+        if: matrix.os == 'windows-latest' && github.event.pull_request.merged == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version_win.outputs.version }}
+          name: Release v${{ steps.get_version_win.outputs.version }}
+          body: |
+            Auto release from workflow for Windows build.
+          files: dist/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

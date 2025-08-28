@@ -1,0 +1,41 @@
+{
+  "app_name": "King God Castle AIO",
+  "screens": {
+    "install_setup_xapk": {
+      "title": "XAPK Installer",
+      "icon": "package.png",
+      "hide_sidebar": true,
+      "no_navigation": true,
+      "description": "Standalone XAPK installer without any menu access"
+    },
+    "tools": {
+      "title": "Công Cụ",
+      "icon": "tools.png"
+    },
+    "settings": {
+      "title": "Cài Đặt",
+      "icon": "settings.png"
+    },
+    "about": {
+      "title": "Giới Thiệu",
+      "icon": "about.png"
+    }
+  },
+  "version": "1.0.0",
+  "author": "King God Castle Team",
+  "description": "All-in-One application for King God Castle",
+  "window": {
+    "default_width": 1200,
+    "default_height": 800,
+    "min_width": 800,
+    "min_height": 600,
+    "resizable": true,
+    "floating": true,
+    "always_on_top": false,
+    "transparency": 0.95
+  },
+  "theme": {
+    "mode": "dark",
+    "color_theme": "blue"
+  }
+}

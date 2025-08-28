@@ -1,0 +1,49 @@
+{
+  "colors": {
+    "primary": "#1f538d",
+    "secondary": "#14375e",
+    "accent": "#ff6b35",
+    "background": "#212121",
+    "surface": "#2d2d2d",
+    "text_primary": "#ffffff",
+    "text_secondary": "#b0b0b0",
+    "success": "#4caf50",
+    "warning": "#ff9800",
+    "error": "#f44336",
+    "info": "#2196f3"
+  },
+  "fonts": {
+    "primary": {
+      "family": "Segoe UI",
+      "size": {
+        "small": 10,
+        "normal": 12,
+        "medium": 14,
+        "large": 16,
+        "xlarge": 20,
+        "title": 24
+      }
+    },
+    "mono": {
+      "family": "Consolas",
+      "size": 11
+    }
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 16,
+    "lg": 24,
+    "xl": 32,
+    "xxl": 48
+  },
+  "border_radius": {
+    "small": 4,
+    "medium": 8,
+    "large": 12
+  },
+  "animation": {
+    "duration": 0.2,
+    "easing": "ease-in-out"
+  }
+}

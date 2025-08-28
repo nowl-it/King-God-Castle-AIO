@@ -13,15 +13,25 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Download build artifacts
+      - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          path: ./artifacts
+          name: KingGodCastleAIO-ubuntu-*
+          path: ./artifacts/linux
 
-      - name: Get version from workflow_run
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: KingGodCastleAIO-windows-*
+          path: ./artifacts/windows
+
+      - name: Get version from artifact name
         id: get_version
         run: |
-          VERSION=$(ls ./artifacts | grep -oP '(?<=KingGodCastleAIO-(ubuntu|windows)-)\d+\.\d+\.\d+\w*' | head -n1)
+          VERSION=$(ls ./artifacts/linux 2>/dev/null | grep -oP '(?<=KingGodCastleAIO-ubuntu-)\d+\.\d+\.\d+\w*' | head -n1)
+          if [ -z "$VERSION" ]; then
+            VERSION=$(ls ./artifacts/windows 2>/dev/null | grep -oP '(?<=KingGodCastleAIO-windows-)\d+\.\d+\.\d+\w*' | head -n1)
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -31,6 +41,8 @@ jobs:
           name: Release v${{ steps.get_version.outputs.version }}
           body: |
             Auto release from workflow_run for cross-platform build.
-          files: ./artifacts/**/*
+          files: |
+            ./artifacts/linux/*
+            ./artifacts/windows/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
